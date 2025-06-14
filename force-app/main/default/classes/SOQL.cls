@@ -179,12 +179,10 @@ public with sharing class SOQL {
 	 */
 	public static Decimal getTotalRevenueByStage(String stage) {
 		// Use AggregateQuery to get the total revenue
-		AggregateResult[] arResults = [SELECT StageName, SUM(Amount) amount FROM Opportunity WHERE StageName = :stage OR Amount > 10000 GROUP BY StageName];
-		Decimal totalRevenue = 0;
+		AggregateResult result = [SELECT SUM(Amount) amount FROM Opportunity WHERE StageName = :stage OR Amount > 10000];
 		// Return the total revenue
-		for(AggregateResult result: arResults){
-				totalRevenue += (Decimal)result.get('amount');
-		}	
+		Decimal	totalRevenue = (Decimal)result.get('amount');
+		
 		return totalRevenue; // Replace null with the variable you used to store the result
 	}
 
@@ -235,9 +233,8 @@ public with sharing class SOQL {
 		// Create a set to hold the Case Ids
 		Set<Id> caseIds = new Set<Id>();
 		// Query the Cases
-		List<Case> caseList = [SELECT Subject, AccountId, Status FROM Case WHERE AccountId = :accountId];
 		// Loop through each Case and add the Id to the set
-		for (Case cas : caseList) {
+		for (Case cas : [SELECT Subject, AccountId, Status FROM Case WHERE AccountId = :accountId]) {
 			caseIds.add(cas.Id);
 		}
 		return caseIds; // Replace null with the variable you used to store the result
@@ -254,11 +251,10 @@ public with sharing class SOQL {
 		// Create a map to hold the Account Ids to Account Names
 		Map<Id, String> accountIdsToNames = new Map<Id, String>();
 		// Query the Accounts
-		List<Account> acccuntsNotInCountry = [SELECT Name, BillingCountry FROM Account WHERE BillingCountry != :country];
 		// Loop through each Account and add the Id and Name to the map
-		for(Account acc : acccuntsNotInCountry){
-			accountIdsToNames.put(acc.id, acc.Name);
-		}
+			for(Account acc : [SELECT Name, BillingCountry FROM Account WHERE BillingCountry != :country]){
+				accountIdsToNames.put(acc.id, acc.Name);
+			}
 		return accountIdsToNames; // Replace null with the variable you used to store the result
 	}
 
@@ -311,7 +307,7 @@ public with sharing class SOQL {
 	 * @return A list of Accounts with matching email domains.
 	 */
 	public static List<Account> findAccountsByLeadEmailDomains(Set<Id> leadIds) {
-		// Query the Leads
+		// Step 1 Query the Leads and extract domains
 		List<Lead> leads = [SELECT Email, LastName, Company FROM Lead WHERE Id IN :leadIds];
 		// Create a set of email domains from the Leads
 		Set<String> emailDomains = new Set<String>();
@@ -319,14 +315,21 @@ public with sharing class SOQL {
 		// Get the email from the Lead
 		// Check if the email is not null
 		// Add the email domain to the set
-		for(Lead lead: leads){
-			if(lead.Email != null){
+		for (Lead lead: leads) {
+			if (lead.Email != null) {
 				emailDomains.add('%' + lead.Email.split('@')[1]);
 			}
 		}
-		// Query the Accounts
-		List<Account> accountList = [SELECT Name, Website FROM Account WHERE website LIKE : emailDomains];
-		return accountList; // Replace null with the variable you used to store the result
+		 // Step 2: Build dynamic WHERE clause using LIKE
+    	List<String> conditions = new List<String>();
+    	for (String domain : emailDomains) {
+        	conditions.add('Website LIKE \'' + String.escapeSingleQuotes(domain) + '\'');
+    	}
+
+    	String whereClause = String.join(conditions, ' OR ');
+    	String query = 'SELECT Id, Name, Website FROM Account WHERE ' + whereClause;
+	  	// Step 3: Execute and return
+    	return Database.query(query);
 	}
 
 	/**
@@ -344,9 +347,9 @@ public with sharing class SOQL {
 		List<OpportunityLineItem> newOpportunityLineItem = new List<OpportunityLineItem>();
 		// Generate a random number between 1 and 3
 		// Loop through each cloned Opportunity Id
-		for(Id cloneOppId : cloneOppIds){
+		for (Id cloneOppId : cloneOppIds) {
 		// Loop through each original line item
-			for(OpportunityLineItem lineItem : orgiOpportunityLineItem){
+			for (OpportunityLineItem lineItem : orgiOpportunityLineItem) {
 				// Clone the original line item and add the random number to the quantity
 				OpportunityLineItem newLineItem = new OpportunityLineItem();
 				newLineItem.OpportunityId = cloneOppId;
@@ -358,7 +361,7 @@ public with sharing class SOQL {
 			}
 		}
 		// Insert the new line items
-		Insert newOpportunityLineItem;
+		insert newOpportunityLineItem;
 	}
 
 	/**
@@ -381,7 +384,7 @@ public with sharing class SOQL {
 		List<Opportunity> closedWonOppList = getOpportunityDetailsForClosedWon();
 		// Create a set of Account Ids from the Opportunities
 		Set<Id> acctIds = new Set<Id>();
-		for(Opportunity opp: closedWonOppList){
+		for (Opportunity opp: closedWonOppList) {
 			if (opp.AccountId != null) {
 				acctIds.add(opp.AccountId);
 			}
@@ -403,6 +406,6 @@ public with sharing class SOQL {
 			}	
 		}
 		// Update the Opportunities
-		Update closedWonOppList;
+		update closedWonOppList;
 	}
 }
